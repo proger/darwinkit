@@ -1,0 +1,33 @@
+#!/bin/bash
+if [[ -z "$1" || -z "$2" ]]; then
+    echo "Usage: $0 username homedir_path"
+    exit 1
+fi
+
+set -x
+
+NAME=$1
+HOME=$2
+next_uid=$((`dscl . ls /Users uid | awk '{print $2}' | sort -nr | head -n1` + 1))
+next_gid=$((`dscl . ls /Groups gid | awk '{print $2}' | sort -nr | head -n1` + 1))
+echo "create user group"
+dscl . -create /Groups/${NAME}
+dscl . -create /Groups/${NAME} PrimaryGroupID $next_gid
+echo "create user"
+dscl . -create /Users/${NAME}
+dscl . -create /Users/${NAME} UserShell /bin/bash
+dscl . -create /Users/${NAME} RealName "${NAME}"
+dscl . -create /Users/${NAME} UniqueID $next_uid
+dscl . -create /Users/${NAME} PrimaryGroupID $next_gid
+dscl . -create /Users/${NAME} NFSHomeDirectory "${HOME}"
+echo "assign user to his group"
+dscl . -append /Groups/${NAME} GroupMembership ${NAME}
+dscl . -append /Groups/com.apple.access_ssh GroupMembership ${NAME}
+dscl . -append /Groups/com.apple.access_screensharing GroupMembership ${NAME}
+dscl . -append /Groups/staff GroupMembership ${NAME}
+dscl . -append /Groups/wheel GroupMembership ${NAME}
+echo "create user home directory"
+mkdir -p ${HOME}
+chown ${NAME}:${NAME} ${HOME}
+
+# vim: set sw=4 sts=4 et tw=80 :
