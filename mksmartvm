@@ -1,0 +1,90 @@
+#!/bin/sh
+# 
+# origin: https://github.com/jperkin/scripts
+#
+# Configurables:
+#
+#  - Disk size is in GB
+#  - Memory size is in MB
+#  - SSH port is the local forwarded port to the VM:22
+#
+disksize="32"
+memsize="1024"
+sshport="8322"
+vmname="SmartOS"
+dlsite="https://download.joyent.com/pub/iso"
+
+vboxdir=$(VBoxManage list systemproperties \
+            | awk '/^Default.machine.folder/ { print $4 }')
+
+#
+# Download MD5 file and parse it for the latest ISO image and checksum
+#
+curl -o smartos-sums.txt ${dlsite}/md5sums.txt 2>/dev/null
+latest_md5=$(awk '/latest.iso/ { print $1 }' smartos-sums.txt)
+smartos_version=$(sed -ne "/^${latest_md5}/s/.*-\(.*\).iso/\1/p" \
+                    smartos-sums.txt)
+if [ -z "${smartos_version}" ]; then
+  echo "ERROR: Couldn't determine latest version"
+  exit 1
+fi
+
+#
+# Download the latest ISO image and verify
+#
+mkdir -p "${vboxdir}/${vmname}"
+if [ ! -f "${vboxdir}/${vmname}/smartos-${smartos_version}.iso" ]; then
+  echo "Downloading ${dlsite}/smartos-${smartos_version}.iso"
+  curl -o "${vboxdir}/${vmname}/smartos-${smartos_version}.iso" \
+          ${dlsite}/smartos-${smartos_version}.iso
+  #dl_md5=$(md5sum "${vboxdir}/${vmname}/smartos-${smartos_version}.iso" \
+  #           | awk '{ print $1 }')
+  dl_md5=$(md5 -q "${vboxdir}/${vmname}/smartos-${smartos_version}.iso")
+  if [ -z "${dl_md5}" ]; then
+    echo "ERROR: Couldn't fetch ISO image"
+    exit 1
+  fi
+  if [ "${latest_md5}" != "${dl_md5}" ]; then
+    echo "ERROR: md5 checksums do not match"
+    exit 1
+  fi
+fi
+
+#
+# Create VirtualBox VM
+#
+echo "Creating/Updating Virtual Machine"
+VBoxManage showvminfo "${vmname}" >/dev/null 2>&1
+if [ $? -eq 0 ]; then
+    # VM already exists, just update the ISO image
+    VBoxManage storageattach "${vmname}" --storagectl "IDE Controller" \
+      --port 1 --device 0 --type dvddrive \
+      --medium "${vboxdir}/${vmname}/smartos-${smartos_version}.iso"
+else
+    # Create the VM
+    VBoxManage createvm --name "${vmname}" --ostype OpenSolaris_64 --register
+    VBoxManage storagectl "${vmname}" --name "IDE Controller" --add ide
+
+    # Attach the ISO image
+    VBoxManage storageattach "${vmname}" --storagectl "IDE Controller" \
+      --port 1 --device 0 --type dvddrive \
+      --medium "${vboxdir}/${vmname}/smartos-${smartos_version}.iso"
+
+    # Create and attach the zone disk
+    VBoxManage createhd --filename "${vboxdir}/${vmname}/smartos-zones.vdi" \
+      --size $(echo "${disksize}*1024" | bc)
+    VBoxManage storageattach "${vmname}" --storagectl "IDE Controller" \
+      --port 0 --device 0 --type hdd \
+      --medium "${vboxdir}/${vmname}/smartos-zones.vdi"
+
+    # Set misc settings
+    VBoxManage modifyvm "${vmname}" --boot1 dvd --boot2 disk --boot3 none
+    VBoxManage modifyvm "${vmname}" --memory ${memsize}
+    VBoxManage modifyvm "${vmname}" --natpf1 "SSH,tcp,,${sshport},,22"
+fi
+
+#
+# Start it up
+#
+echo "Starting Virtual Machine"
+VirtualBox --startvm "${vmname}" &
