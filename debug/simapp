@@ -1,0 +1,25 @@
+#!/bin/sh
+
+app=$1
+binary=$2
+
+SDKVER=5.0
+REALHOME=$HOME
+
+exec env "TMPDIR=$REALHOME/Library/Application Support/iPhone Simulator/$SDKVER/Applications/$app/tmp" \
+"HOME=$REALHOME/Library/Application Support/iPhone Simulator/$SDKVER/Applications/$app" \
+"DYLD_FALLBACK_FRAMEWORK_PATH=/System/Library/Frameworks" \
+"DYLD_ROOT_PATH=/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator$SDKVER.sdk" \
+"IPHONE_SIMULATOR_ROOT=/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator$SDKVER.sdk" \
+"IPHONE_SIMULATOR_CLASS=N90" \
+"IPHONE_SIMULATOR_DEVICE=iPhone" \
+"MallocCorruptionAbort=0" \
+"IPHONE_SIMULATOR_MEMORY_WARNINGS=/tmp/iPhoneSimulatorMemoryWarning" \
+"COMMAND_MODE=unix2003" \
+"IPHONE_SHARED_RESOURCES_DIRECTORY=$REALHOME/Library/Application Support/iPhone Simulator/$SDKVER" \
+"IPHONE_SIMULATOR_VERSIONS=iPhone Simulator 272, iPhone OS $SDKVER (iPhone (Retina)/9A334)" \
+"CFFIXED_USER_HOME=$REALHOME/Library/Application Support/iPhone Simulator/$SDKVER/Applications/$app" \
+"DYLD_FALLBACK_LIBRARY_PATH=/usr/lib" \
+"__CF_USER_TEXT_ENCODING=0x1F5:0:0" \
+ \
+"$REALHOME/Library/Application Support/iPhone Simulator/$SDKVER/Applications/$app/$binary.app/$binary"
