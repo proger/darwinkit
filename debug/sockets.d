@@ -23,8 +23,9 @@ dtrace:::BEGIN
 	err[EHOSTUNREACH] = "No route to host";
 	err[EINPROGRESS]  = "In progress";
 
-	printf("%-6s %-16s %-3s %-16s %-5s %8s %s\n", "PID", "PROCESS", "FAM",
-	    "ADDRESS", "PORT", "LAT(us)", "RESULT");
+	af[af_unix]	  = "un";
+	af[af_inet]	  = "in4";
+	af[af_inet6]	  = "in6";
 }
 
 syscall::connect*:entry
@@ -102,6 +103,20 @@ syscall::connect*:entry
 */
 }
 
+syscall::connect*:return
+/self->start/
+{
+	this->delta = (timestamp - self->start) / 1000;
+	this->errstr = err[errno] != NULL ? err[errno] : lltostr(errno);
+	printf("connect(%s) %s(%d) %s:%d %d %s\n", af[self->family], execname, pid,
+	    self->address, self->port, this->delta, this->errstr);
+	self->family = 0;
+	self->address = 0;
+	self->port = 0;
+	self->start = 0;
+}
+
+
 syscall::accept*:entry
 {
 	/* assume this is sockaddr_in until we can examine family */
@@ -131,21 +146,9 @@ syscall::accept*:return
 {
 	this->delta = (timestamp - self->start) / 1000;
 	this->errstr = err[errno] != NULL ? err[errno] : lltostr(errno);
-	printf("accept:%d %d:%s %s:%d %d %s\n", self->family, pid, execname,
+	printf("accept(%s) %s(%d) %s:%d %d %s\n", af[self->family], execname, pid,
 	    self->address, self->port, this->delta, this->errstr);
 	self->start = 0;
 	self->family = 0;
 }
 
-syscall::connect*:return
-/self->start/
-{
-	this->delta = (timestamp - self->start) / 1000;
-	this->errstr = err[errno] != NULL ? err[errno] : lltostr(errno);
-	printf("connect:%d %d:%s %s:%d %d %s\n", self->family, pid, execname,
-	    self->address, self->port, this->delta, this->errstr);
-	self->family = 0;
-	self->address = 0;
-	self->port = 0;
-	self->start = 0;
-}
