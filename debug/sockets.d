@@ -102,13 +102,48 @@ syscall::connect*:entry
 */
 }
 
+syscall::accept*:entry
+{
+	/* assume this is sockaddr_in until we can examine family */
+	this->sa = arg1;
+	/*
+	printf("fd: %d, family: %d\n", arg0, this->s->sin_family);
+	*/
+}
+
+syscall::accept*:return
+{
+	this->s = (struct sockaddr_in *)copyin(this->sa, sizeof(struct sockaddr));
+	this->f = this->s->sin_family;
+}
+
+syscall::accept*:return
+/this->f == af_unix/
+{
+	self->family = this->f;
+	this->sun =  (struct sockaddr_un *)copyin(this->sa, sizeof(struct sockaddr_un));
+	self->address = this->sun->sun_path;
+	self->port = -1;
+}
+
+syscall::accept*:return
+/self->family/
+{
+	this->delta = (timestamp - self->start) / 1000;
+	this->errstr = err[errno] != NULL ? err[errno] : lltostr(errno);
+	printf("accept:%d %d:%s %s:%d %d %s\n", self->family, pid, execname,
+	    self->address, self->port, this->delta, this->errstr);
+	self->start = 0;
+	self->family = 0;
+}
+
 syscall::connect*:return
 /self->start/
 {
 	this->delta = (timestamp - self->start) / 1000;
 	this->errstr = err[errno] != NULL ? err[errno] : lltostr(errno);
-	printf("%-6d %-16s %-3d %-16s %-5d %8d %s\n", pid, execname,
-	    self->family, self->address, self->port, this->delta, this->errstr);
+	printf("connect:%d %d:%s %s:%d %d %s\n", self->family, pid, execname,
+	    self->address, self->port, this->delta, this->errstr);
 	self->family = 0;
 	self->address = 0;
 	self->port = 0;
