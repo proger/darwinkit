@@ -1,3 +1,4 @@
+
 #pragma D option quiet
 #pragma D option switchrate=10hz
 
@@ -9,6 +10,10 @@ inline int af_unix = 1;		/* AF_UNIX defined in sys/socket.h */
 inline int af_inet = 2;		/* AF_INET defined in bsd/sys/socket.h */
 inline int af_inet6 = 30;	/* AF_INET6 defined in bsd/sys/socket.h */
 
+/*
+ * OSX DTrace stubs
+ */
+
 #define NTOHS(X) ((((X) & 0xFF00) >> 8) | (((X) & 0xFF)) << 8)
 
 /*
@@ -17,17 +22,57 @@ inline int af_inet6 = 30;	/* AF_INET6 defined in bsd/sys/socket.h */
  * converted using the existing strjoin() and lltostr().  It's done in
  * two parts to avoid exhausting DTrace registers in one line of code.
  */
-#define INET_NTOA(ptrbuf, addrbuf1, addrbuf2, ADDR_PTR, ADDR_DEST) \
-	(ptrbuf) = (uint8_t *)&(ADDR_PTR); \
-	(addrbuf1) = strjoin(lltostr((ptrbuf)[0] + 0ULL), strjoin(".", strjoin(lltostr((ptrbuf)[1] + 0ULL), "."))); \
-	(addrbuf2) = strjoin(lltostr((ptrbuf)[2] + 0ULL), strjoin(".", lltostr((ptrbuf)[3] + 0ULL))); \
-	(ADDR_DEST) = strjoin((addrbuf1), (addrbuf2));
+#define INET_NTOA(ADDR_PTR, ADDR_DEST) \
+        this->a = (uint8_t *)&(ADDR_PTR);		\
+	this->addr1 = strjoin(lltostr(this->a[0] + 0ULL), strjoin(".", strjoin(lltostr(this->a[1] + 0ULL), "."))); \
+	this->addr2 = strjoin(lltostr(this->a[2] + 0ULL), strjoin(".", lltostr(this->a[3] + 0ULL))); \
+	(ADDR_DEST) = strjoin(this->addr1, this->addr2);
+
+#define SOCKADDR_UN(P) \
+	this->sun = (struct sockaddr_un *)P; \
+	self->address = this->sun->sun_path; \
+	self->port = 0;
+
+#define SOCKADDR_IN(P) \
+	this->sin = (struct sockaddr_in *)P; \
+	INET_NTOA(this->sin->sin_addr, self->address); \
+	self->port = NTOHS(this->sin->sin_port);
+
+#ifndef IPV6_VERBOSE
+#define SOCKADDR_IN6(P) \
+	this->sin6 = (struct sockaddr_in6 *)P; \
+	self->port = NTOHS(this->sin6->sin6_port); \
+	self->address = self->port == 0 ? "::?" : "?";
+#else
+#define SOCKADDR_IN6(P) \
+	this->sin6 = (struct sockaddr_in6 *)P; \
+	self->port = NTOHS(this->sin6->sin6_port); \
+	self->address = self->port == 0 ? "::?" : "tracememd"; \
+        tracemem((user_addr_t)&this->sin6->sin6_addr, 16); 
+#endif
+
+#define ADDR_INIT(ptr, len)			\
+	this->s = (struct sockaddr *)copyin(ptr, len); \
+	self->address = "(unknown)"; \
+	self->port = 0; \
+	self->family = this->s->sa_family; \
 
 #define ADDR_CLEANUP() \
 	self->family = 0; \
 	self->address = 0; \
 	self->port = 0; \
 	self->start = 0;
+
+#define PRINT_UN() \
+	this->delta = (timestamp - self->start) / 1000; \
+	printf("%s(un) %s(%d) %s %d %s\n", probefunc, execname, pid, self->address, this->delta, STR(err, errno)); \
+	ADDR_CLEANUP();	
+
+#define PRINT() \
+	this->delta = (timestamp - self->start) / 1000; \
+	printf("%s(%s) %s(%d) %s:%d %d %s\n", probefunc, AF(self->family), execname, pid, \
+	       self->address, self->port, this->delta, STR(err, errno)); \
+	ADDR_CLEANUP();
 
 #define STR(table, value) (table[value] != NULL ? table[value] : lltostr(value))
 #define AF(x) STR(af, x)
@@ -60,115 +105,54 @@ dtrace:::ERROR
 	printf("user fault: %s\n", execname);
 }
 
-syscall::connect*:entry
-/arg1/
-{
-	/* assume this is sockaddr_in until we can examine family */
-	this->s = (struct sockaddr_in *)copyin(arg1, sizeof(struct sockaddr_in));
-	this->sa = arg1;
+#define socket_syscall_genprobes(func, entry_ptr, entry_len)   \
+	syscall::func:entry { ADDR_INIT(entry_ptr, entry_len); self->start = timestamp; } \
+	syscall::func:entry /self->family == af_inet/ {SOCKADDR_IN(this->s);} \
+	syscall::func:entry /self->family == af_inet6/ {SOCKADDR_IN6(this->s);} \
+	syscall::func:entry /self->family == af_unix/ {SOCKADDR_UN(this->s);} \
+	syscall::func:return /self->family == af_unix/ {PRINT_UN();}	\
+	syscall::func:return /self->family/ {PRINT();}
 
-	self->address = "(unknown)";
-	self->port = -1;
-	self->start = timestamp;
-	self->family = this->s->sin_family;
-}
+socket_syscall_genprobes(connect*, arg1, arg2)
+socket_syscall_genprobes(bind, arg1, arg2)
 
-syscall::connect*:entry
-/arg1 == 0/
-{
-	self->address = "(unknown)";
-	self->port = -1;
-	self->start = timestamp;
-	self->family = -1;
-}
-
-syscall::connect*:entry
-/self->family == af_inet/
-{
-	self->port = NTOHS(this->s->sin_port);
-	INET_NTOA(this->a, this->addr1, this->addr2, this->s->sin_addr, self->address);
-
-	/*
-	printf("%-6d %-16s  INET %-16s %-5d\n", pid, execname, self->address, self->port);
-	*/
-}
-
-syscall::connect*:entry
-/self->family == af_inet6/
-{
-	this->s6 = (struct sockaddr_in6 *)copyin(this->sa, sizeof (struct sockaddr_in6));
-
-	self->port = NTOHS(this->s6->sin6_port);
-	self->address = "tracememd";
-	tracemem((user_addr_t)&this->s6->sin6_addr, 128);
-
-	/*
-	printf("%-6d %-16s INET6 %-16s %-5d\n", pid, execname, self->address, self->port);
-	*/
-}
-
-syscall::connect*:entry
-/self->family == af_unix/
-{
-	this->sun = (struct sockaddr_un *)copyin(this->sa, sizeof(struct sockaddr_un));
-	self->address = this->sun->sun_path;
-}
-
-syscall::connect*:return
-/self->family == af_unix/
-{
-	this->delta = (timestamp - self->start) / 1000;
-	printf("connect(un) %s(%d) %s %d %s\n", execname, pid, self->address, this->delta, STR(err, errno));
-
-	ADDR_CLEANUP();
-}
-
-syscall::connect*:return
-/self->family && self->family != af_unix/
-{
-	this->delta = (timestamp - self->start) / 1000;
-	printf("connect(%s) %s(%d) %s:%d %d %s\n", AF(self->family), execname, pid, self->address, self->port, this->delta, STR(err, errno));
-
-	ADDR_CLEANUP();
-}
+/*
+ * accept(2) is special: sockaddrs are written between entry and return by the kernel
+ */
 
 syscall::accept*:entry
 {
-	/* assume this is sockaddr_in until we can examine family */
-	this->sa = arg1;
+	self->sa = arg1; /* kernel will write here later */
+	self->lenp = (user_addr_t)arg2;
+
         self->start = timestamp;
 }
 
 syscall::accept*:return
 {
-	this->s = (struct sockaddr_in *)copyin(this->sa, sizeof(struct sockaddr_in));
-	self->family = this->s->sin_family;
-
-        this->delta = (timestamp - self->start) / 1000;
-        this->errstr = err[errno] != NULL ? err[errno] : lltostr(errno);
+	this->len = *(socklen_t *)copyin(self->lenp, sizeof(socklen_t));
+	ADDR_INIT(self->sa, this->len);
 }
 
 syscall::accept*:return
 /self->family == af_unix/
 {
-	this->sun = (struct sockaddr_un *)copyin(this->sa, sizeof(struct sockaddr_un));
-	self->address = this->sun->sun_path;
-
-	printf("accept(un) %s(%d) %s %d %s\n", execname, pid, self->address, this->delta, this->errstr);
-
-	ADDR_CLEANUP();
+	SOCKADDR_UN(this->s);
+	PRINT_UN();
 }
 
 syscall::accept*:return
-/self->family != af_unix/
+/self->family == af_inet6/
 {
-	/* TODO: sockaddr_in6 */
-
-	self->port = NTOHS(this->s->sin_port);
-	INET_NTOA(this->a, this->addr1, this->addr2, this->s->sin_addr, self->address);
-
-	printf("accept(%s) %s(%d) %s:%d %d %s\n", AF(self->family), execname, pid,
-	    self->address, self->port, this->delta, this->errstr);
-
-	ADDR_CLEANUP();
+	SOCKADDR_IN6(this->s);
+	PRINT();
 }
+
+syscall::accept*:return
+/self->family == af_inet/
+{
+	SOCKADDR_IN(this->s);
+	PRINT();
+}
+
+syscall::accept*:return /self->family/ {PRINT();} 
