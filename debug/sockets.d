@@ -29,42 +29,57 @@ inline int af_inet6 = 30;	/* AF_INET6 defined in bsd/sys/socket.h */
 	self->port = 0; \
 	self->start = 0;
 
-#define AF(x) (af[(x)] != NULL ? af[(x)] : lltostr(x))
+#define STR(table, value) (table[value] != NULL ? table[value] : lltostr(value))
+#define AF(x) STR(af, x)
 
 dtrace:::BEGIN
 {
 	/* Add translations as desired from /usr/include/sys/errno.h */
 	err[0]            = "ok";
-	err[EINTR]        = "Interrupted syscall";
-	err[EIO]          = "I/O error";
-	err[EACCES]       = "Permission denied";
-	err[ENETDOWN]     = "Network is down";
-	err[ENETUNREACH]  = "Network unreachable";
-	err[ECONNRESET]   = "Connection reset";
-	err[ECONNREFUSED] = "Connection refused";
-	err[ETIMEDOUT]    = "Timed out";
-	err[EHOSTDOWN]    = "Host down";
-	err[EHOSTUNREACH] = "No route to host";
-	err[EINPROGRESS]  = "In progress";
+	err[EINTR]        = "EINTR";
+	err[EIO]          = "EIO";
+	err[EACCES]       = "EACCES";
+	err[ENETDOWN]     = "ENETDOWN";
+	err[ENETUNREACH]  = "ENETUNREACH";
+	err[ECONNRESET]   = "ECONNRESET";
+	err[ECONNREFUSED] = "ECONNREFUSED";
+	err[ETIMEDOUT]    = "ETIMEDOUT";
+	err[EHOSTDOWN]    = "EHOSTDOWN";
+	err[EHOSTUNREACH] = "EHOSTUNREACH";
+	err[EINPROGRESS]  = "EINPROGRESS";
 
+	af[-1]            = "UNDEFINED";
 	af[af_unix]	  = "un";  
 	af[af_inet]	  = "in4";
 	af[af_inet6]	  = "in6";
 }
 
+dtrace:::ERROR
+/arg4 == DTRACEFLT_UPRIV/
+{
+	printf("user fault: %s\n", execname);
+}
+
 syscall::connect*:entry
+/arg1/
 {
 	/* assume this is sockaddr_in until we can examine family */
-	this->s = (struct sockaddr_in *)copyin(arg1, sizeof(struct sockaddr));
-	this->f = this->s->sin_family;
+	this->s = (struct sockaddr_in *)copyin(arg1, sizeof(struct sockaddr_in));
 	this->sa = arg1;
-	/*
-	printf("fd: %d, family: %d\n", arg0, this->s->sin_family);
-	*/
 
 	self->address = "(unknown)";
+	self->port = -1;
 	self->start = timestamp;
-	self->family = this->f;
+	self->family = this->s->sin_family;
+}
+
+syscall::connect*:entry
+/arg1 == 0/
+{
+	self->address = "(unknown)";
+	self->port = -1;
+	self->start = timestamp;
+	self->family = -1;
 }
 
 syscall::connect*:entry
@@ -103,8 +118,7 @@ syscall::connect*:return
 /self->family == af_unix/
 {
 	this->delta = (timestamp - self->start) / 1000;
-	this->errstr = err[errno] != NULL ? err[errno] : lltostr(errno);
-	printf("connect(un) %s(%d) %s %d %s\n", execname, pid, self->address, this->delta, this->errstr);
+	printf("connect(un) %s(%d) %s %d %s\n", execname, pid, self->address, this->delta, STR(err, errno));
 
 	ADDR_CLEANUP();
 }
@@ -113,8 +127,7 @@ syscall::connect*:return
 /self->family && self->family != af_unix/
 {
 	this->delta = (timestamp - self->start) / 1000;
-	this->errstr = err[errno] != NULL ? err[errno] : lltostr(errno);
-	printf("connect(%s) %s(%d) %s:%d %d %s\n", AF(self->family), execname, pid, self->address, self->port, this->delta, this->errstr);
+	printf("connect(%s) %s(%d) %s:%d %d %s\n", AF(self->family), execname, pid, self->address, self->port, this->delta, STR(err, errno));
 
 	ADDR_CLEANUP();
 }
