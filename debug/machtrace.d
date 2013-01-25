@@ -1,6 +1,10 @@
 #pragma D option quiet
 
 /*
+ * trace system calls together with mach traps
+ */
+
+/*
  * Command line arguments
  */
 inline int OPT_follow    = 1;
@@ -25,7 +29,7 @@ inline string TRACE      = "";
 dtrace:::BEGIN
 /$target/
 {
-  printf("tracing pid %d\n", $target);
+	printf("tracing pid %d\n", $target);
 }
 
 dtrace:::BEGIN
@@ -45,11 +49,23 @@ dtrace:::BEGIN
 }
 
 /*
- * Save syscall entry info
+ * Syscalls that were started before DTrace attached
  */
 
+syscall:::return,
+mach_trap:::return
+/!self->start && (pid == $target || ppid == $target)/
+{
+       self->code = errno == 0 ? "" : "Err#";
+
+       printf("UNEXPECTED RETURN: %5d 0x%x %s %s(???)\t\t = %d errno = %d\n",
+	      pid, tid, probeprov, probefunc ,(int)arg0,(int)errno);
+       OPT_stack ? ustack()    : 1;
+       OPT_stack ? trace("\n") : 1;
+}
+
 /*
- * poor man's progenyof()
+ * Save syscall entry info
  */
 
 /* MacOS X: notice first appearance of child from fork. Its parent
