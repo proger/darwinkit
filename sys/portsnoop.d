@@ -1,12 +1,15 @@
 #!/usr/sbin/dtrace -Cs
 
-#define OSX_10_7_4
+#define OSX_10_8_2
 
 #ifdef OSX_10_7_3
 #define ipc_space_kernel (void *)0xffffff801341bf40 /* lookup in gdb */
 #endif
 #ifdef OSX_10_7_4
 #define ipc_space_kernel (void *)0xffffff80115b9f40
+#endif
+#ifdef OSX_10_8_2
+#define ipc_space_kernel (void *)0xffffff8043cc6fc0
 #endif
 #define space_comm(space) ((proc_t)space->is_task->bsd_info)->p_comm
 #define	IO_BITS_ACTIVE	0x80000000
