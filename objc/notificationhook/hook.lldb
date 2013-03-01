@@ -1,0 +1,2 @@
+expr (void*)dlopen("{{ PWD }}/notificationhook.dylib", 0x2|0x8)
+expr (void)notificationhook_do()
