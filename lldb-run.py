@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# lldb-run: because lldb -s is broken
+
 import sys
 sys.path.insert(0, '/System/Library/PrivateFrameworks/LLDB.framework/Resources/Python')
 
