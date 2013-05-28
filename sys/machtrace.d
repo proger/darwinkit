@@ -58,8 +58,8 @@ mach_trap:::return
 {
        self->code = errno == 0 ? "" : "Err#";
 
-       printf("UNEXPECTED RETURN: %5d 0x%x %s %s(???)\t\t = %d errno = %d\n",
-	      pid, tid, probeprov, probefunc ,(int)arg0,(int)errno);
+       printf("UNEXPECTED RETURN: %5d 0x%x %s %s(XXX)\t\t = %d errno = %d\n",
+	      pid, tid, probeprov, probefunc ,(int)arg0, (int)errno);
        OPT_stack ? ustack()    : 1;
        OPT_stack ? trace("\n") : 1;
 }
