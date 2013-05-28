@@ -1,4 +1,10 @@
+
+/*
 #pragma D option quiet
+ * usage example:
+ *  dtrace -x dynvarsize=4m -x evaltime=exec -Cs machtrace.d -c ls
+ *  dtrace -x dynvarsize=4m -x evaltime=exec -Cs machtrace.d -p 10
+ */
 
 /*
  * trace system calls together with mach traps
