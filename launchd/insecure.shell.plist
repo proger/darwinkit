@@ -16,7 +16,7 @@
 	<array> 
 		<string>/usr/local/bin/socat</string>
 		<string>tcp-listen:12345,reuseaddr,bind=127.0.0.1</string>
-		<string>exec:/bin/zsh</string>
+		<string>exec:/bin/zsh,stderr</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>
