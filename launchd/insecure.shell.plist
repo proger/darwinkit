@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>WorkingDirectory</key>
+	<string>/</string>
+	<key>Debug</key>
+	<false/>
+	<key>Label</key>
+	<string>insecure.shell</string>
+	<key>OnDemand</key>
+	<false/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ProgramArguments</key>
+	<array> 
+		<string>/usr/local/bin/socat</string>
+		<string>tcp-listen:12345,reuseaddr,bind=127.0.0.1</string>
+		<string>exec:/bin/zsh</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>UserName</key>
+	<string>proger</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>JAVA_HOME</key>
+		<string>/Library/Java/JavaVirtualMachines/jdk1.7.0_13.jdk/Contents/Home</string>
+		<key>PATH</key>
+		<string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Applications/Server.app/Contents/ServerRoot/usr/bin:/Applications/Server.app/Contents/ServerRoot/usr/sbin:/tank/proger/local/bin:/tank/proger/local/ruby/bin</string>
+		<key>GEM_HOME</key>
+		<string>/tank/proger/local/ruby</string>
+		<key>LC_CTYPE</key>
+		<string>en_US.UTF-8</string>
+	</dict>
+</dict>
+</plist>
