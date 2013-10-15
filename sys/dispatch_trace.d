@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2010-2011 Apple Inc. All rights reserved.
+ * Copyright (c) 2013 Vladimir Kirillov <proger@hackndev.com>
  *
  * @APPLE_APACHE_LICENSE_HEADER_START@
  *
@@ -24,6 +25,11 @@
  * Usage: dispatch_dtrace.d -p [pid]
  *        traced process must have been executed with
  *        DYLD_IMAGE_SUFFIX=_profile or DYLD_IMAGE_SUFFIX=_debug
+ *
+ *        _OR_
+ *
+ *        mv -v /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator7.0.sdk/usr/lib/system/libdispatch.dylib{,.backup}
+ *        cp -v /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator7.0.sdk/usr/lib/system/{introspection/,}libdispatch.dylib
  */
 
 #pragma D option quiet
@@ -35,14 +41,14 @@ BEGIN {
 		"Item", "Kind", "Context", "Symbol");
 }
 
-dispatch$target:libdispatch_profile.dylib::queue-push,
-dispatch$target:libdispatch_debug.dylib::queue-push,
-dispatch$target:libdispatch_profile.dylib::queue-pop,
-dispatch$target:libdispatch_debug.dylib::queue-pop,
-dispatch$target:libdispatch_profile.dylib::callout-entry,
-dispatch$target:libdispatch_debug.dylib::callout-entry,
-dispatch$target:libdispatch_profile.dylib::callout-return,
-dispatch$target:libdispatch_debug.dylib::callout-return /!start/ {
+dispatch$target:::queue-push,
+dispatch$target:::queue-push,
+dispatch$target:::queue-pop,
+dispatch$target:::queue-pop,
+dispatch$target:::callout-entry,
+dispatch$target:::callout-entry,
+dispatch$target:::callout-return,
+dispatch$target:::callout-return /!start/ {
 	start = walltimestamp;
 }
 
@@ -50,10 +56,10 @@ dispatch$target:libdispatch_debug.dylib::callout-return /!start/ {
  *         dispatch_object_t item, const char *kind,
  *         dispatch_function_t function, void *context)
  */
-dispatch$target:libdispatch_profile.dylib::queue-push,
-dispatch$target:libdispatch_debug.dylib::queue-push,
-dispatch$target:libdispatch_profile.dylib::queue-pop,
-dispatch$target:libdispatch_debug.dylib::queue-pop {
+dispatch$target:::queue-push,
+dispatch$target:::queue-push,
+dispatch$target:::queue-pop,
+dispatch$target:::queue-pop {
 	printf("%-8d %-3d 0x%08p %-35s%-15s0x%0?p %-43s0x%0?p %-14s0x%0?p",
 		(walltimestamp-start)/1000, cpu, tid, probefunc, probename, arg0,
 		copyinstr(arg1, 42), arg2, copyinstr(arg3, 13), arg5);
@@ -64,10 +70,10 @@ dispatch$target:libdispatch_debug.dylib::queue-pop {
 /* probe callout-entry/-return(dispatch_queue_t queue, const char *label,
  *         dispatch_function_t function, void *context)
  */
-dispatch$target:libdispatch_profile.dylib::callout-entry,
-dispatch$target:libdispatch_debug.dylib::callout-entry,
-dispatch$target:libdispatch_profile.dylib::callout-return,
-dispatch$target:libdispatch_debug.dylib::callout-return {
+dispatch$target:::callout-entry,
+dispatch$target:::callout-entry,
+dispatch$target:::callout-return,
+dispatch$target:::callout-return {
 	printf("%-8d %-3d 0x%08p %-35s%-15s0x%0?p %-43s%-?s   %-14s0x%0?p",
 		(walltimestamp-start)/1000, cpu, tid, probefunc, probename, arg0,
 		copyinstr(arg1, 42), "", "", arg3);
