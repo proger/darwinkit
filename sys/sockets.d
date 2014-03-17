@@ -70,12 +70,13 @@ inline int af_inet6 = 30;	/* AF_INET6 defined in bsd/sys/socket.h */
 
 #define PRINT() \
 	this->delta = (timestamp - self->start) / 1000; \
-	printf("%s(%s) %s(%d) %s:%d %d %s\n", probefunc, AF(self->family), execname, pid, \
+	printf("%s(%s=%d) %s(%d) %s:%d %d %s\n", probefunc, AF(self->family), self->s, execname, pid, \
 	       self->address, self->port, this->delta, STR(err, errno)); \
 	ADDR_CLEANUP();
 
 #define STR(table, value) (table[value] != NULL ? table[value] : lltostr(value))
 #define AF(x) STR(af, x)
+#define SOTYPE(x) STR(so_type, x)
 
 dtrace:::BEGIN
 {
@@ -97,6 +98,11 @@ dtrace:::BEGIN
 	af[af_unix]	  = "un";  
 	af[af_inet]	  = "in4";
 	af[af_inet6]	  = "in6";
+
+	so_type[-1]       = "UNDEFINED";
+	so_type[0]        = "UNDEFINED";
+	so_type[1]	  = "stream";  
+	so_type[2]	  = "dgram";
 }
 
 dtrace:::ERROR
@@ -106,7 +112,7 @@ dtrace:::ERROR
 }
 
 #define socket_syscall_genprobes(func, entry_ptr, entry_len)   \
-	syscall::func:entry { ADDR_INIT(entry_ptr, entry_len); self->start = timestamp; } \
+	syscall::func:entry { self->s = arg0; ADDR_INIT(entry_ptr, entry_len); self->start = timestamp; } \
 	syscall::func:entry /self->family == af_inet/ {SOCKADDR_IN(this->s);} \
 	syscall::func:entry /self->family == af_inet6/ {SOCKADDR_IN6(this->s);} \
 	syscall::func:entry /self->family == af_unix/ {SOCKADDR_UN(this->s);} \
@@ -115,6 +121,20 @@ dtrace:::ERROR
 
 socket_syscall_genprobes(connect*, arg1, arg2)
 socket_syscall_genprobes(bind, arg1, arg2)
+
+syscall::socket:entry
+{
+	self->family = arg0;
+	self->so_type = arg1;
+}
+
+syscall::socket:return
+/self->so_type/
+{
+	printf("%s(%s, %s) %s(%d) = %d\n", probefunc, AF(self->family), SOTYPE(self->so_type), execname, pid, arg1);
+	self->so_type = 0;
+	self->family = 0;
+}
 
 /*
  * accept(2) is special: sockaddrs are written between entry and return by the kernel
