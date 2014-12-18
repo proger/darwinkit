@@ -1,7 +1,8 @@
 darwinkit
 =========
 
-Darwin scripts toolbox: DTrace and GDB scripts, housekeeping stuff
+Darwin scripts toolbox: DTrace and GDB scripts, housekeeping. 
+See [lxperf](https://github.com/proger/lxperf) for Linux.
 
 ## OSX DTrace gotchas
 
